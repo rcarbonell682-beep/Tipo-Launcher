@@ -2,6 +2,8 @@ package com.minilauncher.tipo
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,6 +20,7 @@ import android.text.format.DateFormat
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -49,6 +52,11 @@ class MainActivity : Activity() {
     private var downX = 0f
     private var downY = 0f
     private var swipeMin = 0f
+    private var tapDownX = 0f
+    private var tapDownY = 0f
+    private var lastTap = 0L
+    private var touchSlop = 0
+    private var doubleTapTimeout = 300L
 
     private val imm: InputMethodManager by lazy {
         getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -70,6 +78,8 @@ class MainActivity : Activity() {
 
         prefs = getSharedPreferences("fav", Context.MODE_PRIVATE)
         swipeMin = 72f * resources.displayMetrics.density
+        touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        doubleTapTimeout = ViewConfiguration.getDoubleTapTimeout().toLong()
 
         home = findViewById(R.id.home)
         drawer = findViewById(R.id.drawer)
@@ -95,6 +105,28 @@ class MainActivity : Activity() {
             favViews[i] = tv
         }
         refreshHome()
+
+        home.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    tapDownX = ev.x
+                    tapDownY = ev.y
+                }
+                MotionEvent.ACTION_UP -> {
+                    val moved = abs(ev.x - tapDownX) > touchSlop || abs(ev.y - tapDownY) > touchSlop
+                    if (!moved) {
+                        val t = ev.eventTime
+                        if (t - lastTap <= doubleTapTimeout) {
+                            lastTap = 0L
+                            lockScreen()
+                        } else {
+                            lastTap = t
+                        }
+                    }
+                }
+            }
+            true
+        }
 
         findViewById<View>(R.id.search_button).setOnClickListener { openDrawer(-1) }
 
@@ -202,6 +234,7 @@ class MainActivity : Activity() {
 
     private fun onAppsLoaded() {
         applyFilter(false)
+        syncFavorites()
         refreshHome()
     }
 
@@ -212,19 +245,37 @@ class MainActivity : Activity() {
         dateView.text = DateFormat.format("EEEE d MMMM", now)
     }
 
-    private fun favEntry(slot: Int): AppRepository.Entry? {
+    private class Fav(val pkg: String, val cls: String, val label: String?)
+
+    private fun favOf(slot: Int): Fav? {
         val v = prefs.getString("f$slot", null) ?: return null
-        val s = v.indexOf('/')
+        val bar = v.indexOf('|')
+        val comp = if (bar < 0) v else v.substring(0, bar)
+        val label = if (bar < 0) null else v.substring(bar + 1)
+        val s = comp.indexOf('/')
         if (s < 0) return null
-        return repo.find(v.substring(0, s), v.substring(s + 1))
+        return Fav(comp.substring(0, s), comp.substring(s + 1), label)
+    }
+
+    private fun syncFavorites() {
+        if (repo.size == 0) return
+        for (i in 0 until FAV_COUNT) {
+            val f = favOf(i) ?: continue
+            val e = repo.find(f.pkg, f.cls)
+            if (e == null) {
+                prefs.edit().remove("f$i").apply()
+            } else if (f.label != e.label) {
+                prefs.edit().putString("f$i", e.pkg + "/" + e.cls + "|" + e.label).apply()
+            }
+        }
     }
 
     private fun refreshHome() {
         for (i in 0 until FAV_COUNT) {
             val tv = favViews[i] ?: continue
-            val e = favEntry(i)
-            if (e != null) {
-                tv.text = e.label
+            val f = favOf(i)
+            if (f != null) {
+                tv.text = f.label ?: repo.find(f.pkg, f.cls)?.label ?: "…"
                 tv.setTextColor(COLOR_WHITE)
             } else {
                 tv.text = "+"
@@ -234,12 +285,12 @@ class MainActivity : Activity() {
     }
 
     private fun onFavClick(slot: Int) {
-        val e = favEntry(slot)
-        if (e != null) launch(e) else openDrawer(slot)
+        val f = favOf(slot)
+        if (f != null) launchComponent(f.pkg, f.cls) else openDrawer(slot)
     }
 
     private fun onFavLong(slot: Int) {
-        if (prefs.getString("f$slot", null) == null) {
+        if (favOf(slot) == null) {
             openDrawer(slot)
             return
         }
@@ -266,7 +317,7 @@ class MainActivity : Activity() {
 
     private fun onAppChosen(e: AppRepository.Entry) {
         if (pickSlot >= 0) {
-            prefs.edit().putString("f$pickSlot", e.pkg + "/" + e.cls).apply()
+            prefs.edit().putString("f$pickSlot", e.pkg + "/" + e.cls + "|" + e.label).apply()
             closeDrawer()
             refreshHome()
         } else {
@@ -275,14 +326,37 @@ class MainActivity : Activity() {
     }
 
     private fun launch(e: AppRepository.Entry) {
+        launchComponent(e.pkg, e.cls)
+    }
+
+    private fun launchComponent(pkg: String, cls: String) {
         closeDrawer()
         try {
             val i = Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LAUNCHER)
-                .setClassName(e.pkg, e.cls)
+                .setClassName(pkg, cls)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             startActivity(i)
         } catch (ex: Exception) {
+        }
+    }
+
+    private fun lockScreen() {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val admin = ComponentName(this, LockAdminReceiver::class.java)
+        if (dpm.isAdminActive(admin)) {
+            dpm.lockNow()
+        } else {
+            try {
+                val i = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                    .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
+                    .putExtra(
+                        DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                        "Solo se usa para apagar la pantalla con doble toque."
+                    )
+                startActivity(i)
+            } catch (ex: Exception) {
+            }
         }
     }
 

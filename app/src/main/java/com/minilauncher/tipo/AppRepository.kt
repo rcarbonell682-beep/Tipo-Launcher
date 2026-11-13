@@ -50,6 +50,9 @@ class AppRepository(
         }
     }
 
+    val size: Int
+        get() = apps.size
+
     fun entryAt(position: Int): Entry = apps[hits[position]]
 
     fun find(pkg: String, cls: String): Entry? {
