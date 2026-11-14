@@ -90,4 +90,83 @@
             android:overScrollMode="never"
             android:scrollbars="none" />
     </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="end"
+            android:orientation="vertical"
+            android:paddingLeft="32dp"
+            android:paddingTop="48dp"
+            android:paddingRight="32dp"
+            android:paddingBottom="32dp">
+
+            <TextView
+                android:id="@+id/opt_stats"
+                style="@style/PanelInfo" />
+
+            <TextView
+                android:id="@+id/opt_shizuku"
+                style="@style/PanelInfo"
+                android:paddingBottom="24dp" />
+
+            <TextView
+                android:id="@+id/opt_compile"
+                style="@style/PanelItem"
+                android:text="optimizar apps" />
+
+            <TextView
+                android:id="@+id/opt_kill"
+                style="@style/PanelItem"
+                android:text="cerrar apps" />
+
+            <TextView
+                android:id="@+id/opt_cache"
+                style="@style/PanelItem"
+                android:text="limpiar caché" />
+
+            <TextView
+                android:id="@+id/opt_block"
+                style="@style/PanelItem"
+                android:text="bloquear segundo plano" />
+
+            <TextView
+                android:id="@+id/opt_bloat"
+                style="@style/PanelItem"
+                android:text="bloatware" />
+
+            <TextView
+                android:id="@+id/opt_eco"
+                style="@style/PanelItem" />
+
+            <TextView
+                android:id="@+id/opt_protected"
+                style="@style/PanelItem"
+                android:text="apps protegidas" />
+
+            <TextView
+                android:id="@+id/opt_log"
+                style="@style/PanelInfo"
+                android:fontFamily="monospace"
+                android:paddingTop="24dp"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/opt_close"
+                style="@style/PanelItem"
+                android:paddingTop="24dp"
+                android:text="cerrar"
+                android:textColor="#888888" />
+        </LinearLayout>
+    </ScrollView>
 </FrameLayout>

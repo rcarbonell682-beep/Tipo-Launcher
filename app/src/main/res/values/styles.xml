@@ -6,4 +6,23 @@
         <item name="android:navigationBarColor">@android:color/black</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
+
+    <style name="PanelItem">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">sans-serif-light</item>
+        <item name="android:gravity">end</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">22sp</item>
+    </style>
+
+    <style name="PanelInfo">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textColor">#888888</item>
+        <item name="android:textSize">14sp</item>
+    </style>
 </resources>

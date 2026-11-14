@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var favContainer: LinearLayout
     private lateinit var search: EditText
     private lateinit var list: ListView
+    private lateinit var optimizer: Optimizer
 
     private val favViews = arrayOfNulls<TextView>(FAV_COUNT)
     private val handler = Handler(Looper.getMainLooper())
@@ -57,6 +58,7 @@ class MainActivity : Activity() {
     private var lastTap = 0L
     private var touchSlop = 0
     private var doubleTapTimeout = 300L
+    private var longFired = false
 
     private val imm: InputMethodManager by lazy {
         getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -70,6 +72,11 @@ class MainActivity : Activity() {
 
     private val reloadTask = Runnable {
         repo.load { onAppsLoaded() }
+    }
+
+    private val longPressTask = Runnable {
+        longFired = true
+        optimizer.open()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,6 +95,7 @@ class MainActivity : Activity() {
         favContainer = findViewById(R.id.favorites)
         search = findViewById(R.id.search)
         list = findViewById(R.id.list)
+        optimizer = Optimizer(this, findViewById(R.id.panel))
 
         repo = AppRepository(packageManager, packageName)
         val inflater = LayoutInflater.from(this)
@@ -111,16 +119,35 @@ class MainActivity : Activity() {
                 MotionEvent.ACTION_DOWN -> {
                     tapDownX = ev.x
                     tapDownY = ev.y
+                    longFired = false
+                    if (ev.y >= clockView.top && ev.y <= dateView.bottom) {
+                        handler.postDelayed(
+                            longPressTask,
+                            ViewConfiguration.getLongPressTimeout().toLong()
+                        )
+                    }
                 }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(ev.x - tapDownX) > touchSlop || abs(ev.y - tapDownY) > touchSlop) {
+                        handler.removeCallbacks(longPressTask)
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> handler.removeCallbacks(longPressTask)
                 MotionEvent.ACTION_UP -> {
-                    val moved = abs(ev.x - tapDownX) > touchSlop || abs(ev.y - tapDownY) > touchSlop
-                    if (!moved) {
-                        val t = ev.eventTime
-                        if (t - lastTap <= doubleTapTimeout) {
-                            lastTap = 0L
-                            lockScreen()
-                        } else {
-                            lastTap = t
+                    handler.removeCallbacks(longPressTask)
+                    if (longFired) {
+                        longFired = false
+                        lastTap = 0L
+                    } else {
+                        val moved = abs(ev.x - tapDownX) > touchSlop || abs(ev.y - tapDownY) > touchSlop
+                        if (!moved) {
+                            val t = ev.eventTime
+                            if (t - lastTap <= doubleTapTimeout) {
+                                lastTap = 0L
+                                lockScreen()
+                            } else {
+                                lastTap = t
+                            }
                         }
                     }
                 }
@@ -184,32 +211,43 @@ class MainActivity : Activity() {
         f.addAction(Intent.ACTION_TIMEZONE_CHANGED)
         registerReceiver(tickReceiver, f)
         updateClock()
+        optimizer.onResume()
     }
 
     override fun onPause() {
         super.onPause()
         unregisterReceiver(tickReceiver)
+        optimizer.onPause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(reloadTask)
+        handler.removeCallbacks(longPressTask)
+        optimizer.destroy()
         pkgReceiver?.let { unregisterReceiver(it) }
         pkgReceiver = null
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN) closeDrawer()
+        if (intent.action == Intent.ACTION_MAIN) {
+            closeDrawer()
+            optimizer.close()
+        }
     }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (drawer.visibility == View.VISIBLE) closeDrawer()
+        if (optimizer.isOpen) {
+            optimizer.close()
+        } else if (drawer.visibility == View.VISIBLE) {
+            closeDrawer()
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (drawer.visibility != View.VISIBLE) {
+        if (drawer.visibility != View.VISIBLE && !optimizer.isOpen) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = ev.x
