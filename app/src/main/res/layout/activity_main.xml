@@ -121,6 +121,11 @@
                 android:paddingBottom="24dp" />
 
             <TextView
+                android:id="@+id/opt_4g"
+                style="@style/PanelItem"
+                android:text="forzar 4G" />
+
+            <TextView
                 android:id="@+id/opt_compile"
                 style="@style/PanelItem"
                 android:text="optimizar apps" />

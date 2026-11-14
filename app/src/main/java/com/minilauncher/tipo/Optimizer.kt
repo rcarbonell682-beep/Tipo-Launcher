@@ -52,6 +52,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
         get() = panel.visibility == View.VISIBLE
 
     init {
+        bind(R.id.opt_4g) { open4g() }
         bind(R.id.opt_compile) { doCompile() }
         bind(R.id.opt_kill) { doKill() }
         bind(R.id.opt_cache) { doCache() }
@@ -253,6 +254,27 @@ class Optimizer(private val act: Activity, private val panel: View) {
             .setPositiveButton("Aplicar") { _, _ -> ok(c) }
             .setNegativeButton("Cancelar", null)
             .show()
+    }
+
+    // ------------------------------------------------------------ forzar 4G
+
+    /** Abre "Información del teléfono" (RadioInfo) para elegir el tipo de red preferido. */
+    private fun open4g() {
+        try {
+            act.startActivity(
+                Intent()
+                    .setClassName("com.android.settings", "com.android.settings.RadioInfo")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            close()
+        } catch (t: Throwable) {
+            if (ready()) {
+                runTask("Abriendo información del teléfono") {
+                    Sh.run("am start -n com.android.settings/com.android.settings.RadioInfo")
+                    "Listo."
+                }
+            }
+        }
     }
 
     // ------------------------------------------------------------ 1. compilar
