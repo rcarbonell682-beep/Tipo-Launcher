@@ -38,7 +38,7 @@ funciona igual sin él)*
 | limpiar caché | Borra la caché de todas las apps y muestra el espacio liberado | `pm trim-caches 999G` |
 | bloquear segundo plano | Eliges apps a las que se les quita el segundo plano y el autoinicio | `cmd appops set … RUN_IN_BACKGROUND/RUN_ANY_IN_BACKGROUND ignore`, `am set-standby-bucket … restricted` |
 | bloatware | Lista de apps de Xiaomi/Google que suelen sobrar; se desactivan y reactivan con un toque | `pm disable-user --user 0` / `pm enable` |
-| ahorro extremo | Ahorro de batería y de datos, brillo bajo, cierra y restringe apps. Se revierte con un toque | `settings put global low_power`, `cmd netpolicy set restrict-background`, brillo y apps |
+| ahorro extremo | Ahorro de datos, brillo bajo, cierra y restringe apps. Se revierte con un toque. No toca el ahorro de batería del sistema | `cmd netpolicy set restrict-background`, brillo y apps |
 | apps protegidas | Apps que nunca se cierran ni se restringen (además del launcher, el teclado, Shizuku y Google Play, que siempre están protegidos) | — |
 | guía | Vuelve a mostrar la guía de bienvenida | — |
 

@@ -506,7 +506,6 @@ class Optimizer(private val act: Activity, private val panel: View) {
             val blocked = strSet("blocked")
             val eco = HashSet<String>()
             val c = StringBuilder()
-            c.append("settings put global low_power 1; ")
             c.append("cmd netpolicy set restrict-background true; ")
             c.append("settings put system screen_brightness_mode 0; ")
             c.append("settings put system screen_brightness 30; ")
@@ -521,7 +520,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
             c.append("am kill-all")
             Sh.run(c.toString())
             sp.edit().putBoolean("eco", true).putStringSet("eco_apps", eco).apply()
-            "Ahorro extremo ACTIVO.\nAhorro de batería y de datos, brillo bajo, apps cerradas y restringidas."
+            "Ahorro extremo ACTIVO.\nAhorro de datos, brillo bajo, apps cerradas y restringidas."
         }
     }
 
@@ -530,7 +529,6 @@ class Optimizer(private val act: Activity, private val panel: View) {
             val eco = strSet("eco_apps")
             val blocked = strSet("blocked")
             val c = StringBuilder()
-            c.append("settings put global low_power 0; ")
             c.append("cmd netpolicy set restrict-background false; ")
             c.append("settings put system screen_brightness_mode ").append(sp.getInt("bm", 0)).append("; ")
             c.append("settings put system screen_brightness ").append(sp.getInt("b", 100)).append("; ")
