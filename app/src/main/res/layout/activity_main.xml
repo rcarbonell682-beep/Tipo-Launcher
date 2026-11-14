@@ -160,6 +160,11 @@
                 android:text="apps protegidas" />
 
             <TextView
+                android:id="@+id/opt_guide"
+                style="@style/PanelItem"
+                android:text="guía" />
+
+            <TextView
                 android:id="@+id/opt_log"
                 style="@style/PanelInfo"
                 android:fontFamily="monospace"

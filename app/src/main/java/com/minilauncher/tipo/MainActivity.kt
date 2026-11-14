@@ -201,6 +201,11 @@ class MainActivity : Activity() {
         registerReceiver(receiver, PackageChangeReceiver.filter())
 
         repo.load { onAppsLoaded() }
+
+        // Primera vez: se muestra la guía de bienvenida (y la opción de launcher predeterminado).
+        if (!getSharedPreferences("app", Context.MODE_PRIVATE).getBoolean("tutorial_seen", false)) {
+            startActivity(Intent(this, SetupActivity::class.java))
+        }
     }
 
     override fun onResume() {
@@ -383,7 +388,10 @@ class MainActivity : Activity() {
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         val admin = ComponentName(this, LockAdminReceiver::class.java)
         if (dpm.isAdminActive(admin)) {
-            dpm.lockNow()
+            try {
+                dpm.lockNow()
+            } catch (ex: SecurityException) {
+            }
         } else {
             try {
                 val i = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)

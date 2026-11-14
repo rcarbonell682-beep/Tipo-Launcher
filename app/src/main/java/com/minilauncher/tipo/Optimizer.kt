@@ -3,6 +3,7 @@ package com.minilauncher.tipo
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -18,7 +19,6 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import android.widget.Toast
-import java.util.concurrent.Executors
 import rikka.shizuku.Shizuku
 
 /** Panel de optimización (Shizuku) que se abre encima del launcher. */
@@ -29,13 +29,13 @@ class Optimizer(private val act: Activity, private val panel: View) {
     private val pm: PackageManager = act.packageManager
     private val sp = act.getSharedPreferences("opt", Context.MODE_PRIVATE)
     private val handler = Handler(Looper.getMainLooper())
-    private val exec by lazy { Executors.newSingleThreadExecutor() }
 
     private val stats: TextView = panel.findViewById(R.id.opt_stats)
     private val shizukuInfo: TextView = panel.findViewById(R.id.opt_shizuku)
     private val ecoItem: TextView = panel.findViewById(R.id.opt_eco)
     private val log: TextView = panel.findViewById(R.id.opt_log)
     private var busy = false
+    private var loadingList = false
 
     private val tick = object : Runnable {
         override fun run() {
@@ -60,7 +60,9 @@ class Optimizer(private val act: Activity, private val panel: View) {
         bind(R.id.opt_bloat) { pickBloat() }
         bind(R.id.opt_eco) { toggleEco() }
         bind(R.id.opt_protected) { pickProtected() }
+        bind(R.id.opt_guide) { openGuide() }
         bind(R.id.opt_close) { close() }
+        shizukuInfo.setOnClickListener { openShizuku() }
         Shizuku.addRequestPermissionResultListener(permListener)
         updateEco()
     }
@@ -124,7 +126,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
     private fun updateShizuku() {
         shizukuInfo.text = try {
             if (!Shizuku.pingBinder()) {
-                "shizuku: no está activo"
+                "shizuku: no está activo (toca para abrirlo)"
             } else if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
                 "shizuku: falta el permiso (toca una opción)"
             } else {
@@ -180,7 +182,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
         busy = true
         act.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setLog("$title…")
-        exec.execute {
+        Thread {
             val r = try {
                 job()
             } catch (t: Throwable) {
@@ -193,7 +195,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
                 updateEco()
                 updateStats()
             }
-        }
+        }.start()
     }
 
     // ------------------------------------------------------------ listas de apps
@@ -241,6 +243,23 @@ class Optimizer(private val act: Activity, private val panel: View) {
         return r
     }
 
+    /** Carga la lista de apps fuera del hilo principal y luego llama a [done] en el principal. */
+    private fun withApps(excludeUserProtected: Boolean, done: (List<App>) -> Unit) {
+        if (loadingList) return
+        loadingList = true
+        Thread {
+            val l = try {
+                apps(excludeUserProtected)
+            } catch (t: Throwable) {
+                emptyList()
+            }
+            handler.post {
+                loadingList = false
+                done(l)
+            }
+        }.start()
+    }
+
     private fun multi(
         title: String,
         labels: Array<String>,
@@ -248,7 +267,7 @@ class Optimizer(private val act: Activity, private val panel: View) {
         ok: (BooleanArray) -> Unit
     ) {
         val c = checked.clone()
-        AlertDialog.Builder(act, AlertDialog.THEME_DEVICE_DEFAULT_DARK)
+        AlertDialog.Builder(act, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             .setTitle(title)
             .setMultiChoiceItems(labels, c) { _, i, on -> c[i] = on }
             .setPositiveButton("Aplicar") { _, _ -> ok(c) }
@@ -258,23 +277,68 @@ class Optimizer(private val act: Activity, private val panel: View) {
 
     // ------------------------------------------------------------ forzar 4G
 
-    /** Abre "Información del teléfono" (RadioInfo) para elegir el tipo de red preferido. */
-    private fun open4g() {
-        try {
-            act.startActivity(
-                Intent()
-                    .setClassName("com.android.settings", "com.android.settings.RadioInfo")
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
-            close()
-        } catch (t: Throwable) {
-            if (ready()) {
-                runTask("Abriendo información del teléfono") {
-                    Sh.run("am start -n com.android.settings/com.android.settings.RadioInfo")
-                    "Listo."
+    /** Busca la pantalla "Información del teléfono" (RadioInfo) en el propio sistema. */
+    private fun findRadioInfo(): ComponentName? {
+        for (pkg in RADIO_PKGS) {
+            try {
+                @Suppress("DEPRECATION")
+                val acts = pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES).activities ?: continue
+                for (a in acts) {
+                    if (a.name.endsWith(".RadioInfo")) return ComponentName(pkg, a.name)
                 }
+            } catch (e: Exception) {
             }
         }
+        return null
+    }
+
+    private fun open4g() {
+        val cn = findRadioInfo()
+        if (cn != null) {
+            try {
+                act.startActivity(Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                close()
+                return
+            } catch (t: Throwable) {
+                // No es accesible desde una app normal: se prueba con Shizuku.
+            }
+        }
+        if (!ready()) return
+        val target = cn?.flattenToShortString()
+        runTask("Abriendo información del teléfono") {
+            var out = ""
+            var opened = false
+            if (target != null && target.matches(SAFE_COMPONENT)) {
+                out = Sh.run("am start -W -n '$target'")
+                opened = !out.contains("Error") && !out.contains("Exception")
+            }
+            if (opened) {
+                handler.post { close() }
+                "Abierto: $target"
+            } else {
+                Sh.run("am broadcast -a android.provider.Telephony.SECRET_CODE -d android_secret_code://4636")
+                "No se pudo abrir la pantalla directamente.\n" +
+                    "Se probó también el código *#*#4636#*#*; si no apareció nada, " +
+                    "tu teléfono no permite abrir esa pantalla desde aquí.\n" +
+                    "Pantalla buscada: ${target ?: "no encontrada"}\n" +
+                    out.trim().take(300)
+            }
+        }
+    }
+
+    private fun openShizuku() {
+        val i = pm.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+        if (i == null) {
+            toast("Shizuku no está instalado.")
+        } else {
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            act.startActivity(i)
+        }
+    }
+
+    private fun openGuide() {
+        close()
+        act.startActivity(Intent(act, SetupActivity::class.java))
     }
 
     // ------------------------------------------------------------ 1. compilar
@@ -339,8 +403,9 @@ class Optimizer(private val act: Activity, private val panel: View) {
         }
     }
 
-    private fun pickBlock() {
-        val list = apps(true)
+    private fun pickBlock() = withApps(true) { list -> showBlock(list) }
+
+    private fun showBlock(list: List<App>) {
         if (list.isEmpty()) {
             toast("No hay apps para mostrar.")
             return
@@ -482,8 +547,9 @@ class Optimizer(private val act: Activity, private val panel: View) {
 
     // ------------------------------------------------------------ apps protegidas
 
-    private fun pickProtected() {
-        val list = apps(false)
+    private fun pickProtected() = withApps(false) { list -> showProtected(list) }
+
+    private fun showProtected(list: List<App>) {
         if (list.isEmpty()) {
             toast("No hay apps para mostrar.")
             return
@@ -501,6 +567,8 @@ class Optimizer(private val act: Activity, private val panel: View) {
 
     companion object {
         private val SAFE_PKG = Regex("[A-Za-z0-9._]+")
+        private val SAFE_COMPONENT = Regex("[A-Za-z0-9._/\\$]+")
+        private val RADIO_PKGS = arrayOf("com.android.phone", "com.android.settings")
 
         // Paquetes de Xiaomi/Google que suelen sobrar; solo se muestran los que existen en el teléfono.
         private val BLOAT = arrayOf(
