@@ -8,6 +8,13 @@ optimización opcional (con Shizuku) para cerrar apps, limpiar caché, ahorrar b
 > (IA de Anthropic). Su autor diseñó la idea, fue pidiendo los cambios y la probó en su
 > teléfono (Redmi A3x). Úsala con criterio: puede tener errores que aún no se han descubierto.
 
+<p align="center">
+  <img src="screenshots/01-inicio.png" width="31%" alt="Pantalla de inicio">
+  <img src="screenshots/02-buscador.png" width="31%" alt="Buscador de apps">
+  <img src="screenshots/03-panel.png" width="31%" alt="Panel de optimización">
+</p>
+<p align="center"><sub>Inicio · Buscador de apps · Panel de optimización</sub></p>
+
 ---
 
 ## Qué hace
